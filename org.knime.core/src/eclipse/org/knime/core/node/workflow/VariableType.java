@@ -81,7 +81,7 @@ import org.knime.core.node.workflow.CredentialsStore.CredentialsFlowVariableValu
  */
 public abstract class VariableType<T> {
 
-    static abstract class VariableValue<T> {
+    abstract static class VariableValue<T> {
 
         private final VariableType<T> m_type;
 
@@ -252,6 +252,12 @@ public abstract class VariableType<T> {
         public static final DoubleType INSTANCE = new DoubleType();
 
         private DoubleType() {
+        }
+
+        @Override
+        public boolean isCompatible(final VariableType<?> type) {
+            // TODO should Boolean be considered to be numeric?
+            return super.isCompatible(type) || LongType.INSTANCE.equals(type) || IntType.INSTANCE.equals(type);
         }
 
         @Override
@@ -453,6 +459,11 @@ public abstract class VariableType<T> {
         }
 
         @Override
+        public boolean isCompatible(final VariableType<?> type) {
+            return this.equals(type) || IntType.INSTANCE.equals(type);
+        }
+
+        @Override
         public Icon getIcon() {
             return SharedIcons.FLOWVAR_LONG.get();
         }
@@ -549,6 +560,17 @@ public abstract class VariableType<T> {
         public static final StringType INSTANCE = new StringType();
 
         private StringType() {
+        }
+
+        @Override
+        public boolean isCompatible(final VariableType<?> type) {
+            // TODO discuss if strings should be compatible to all types.
+            // That would require some changes in other places, too.
+            return super.isCompatible(type) //
+                    || BooleanType.INSTANCE.isCompatible(type) //
+                    || IntType.INSTANCE.isCompatible(type) //
+                    || DoubleType.INSTANCE.isCompatible(type) //
+                    || LongType.INSTANCE.isCompatible(type);
         }
 
         @Override
@@ -789,6 +811,17 @@ public abstract class VariableType<T> {
         @SuppressWarnings("deprecation")
         final boolean isOtherType = getType().equals(FlowVariable.Type.OTHER);
         return isOtherType ? getClass().getSimpleName().replace("Type", "").toUpperCase() : getType().toString();
+    }
+
+    /**
+     * Checks if the provided <b>type</b> is compatible with this type.
+     *
+     * @param type to check for compatibility
+     * @return <code>true</code> if <b>type</b> is compatible with this type
+     * @since 4.2
+     */
+    public boolean isCompatible(final VariableType<?> type) {
+        return this.equals(type);
     }
 
     @SuppressWarnings("deprecation")

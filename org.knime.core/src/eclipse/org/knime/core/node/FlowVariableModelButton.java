@@ -138,18 +138,20 @@ implements ChangeListener, ActionListener {
             this.setText(enabled ? "v!" : "v?");
             return;
         }
+        updateTooltip(enabled);
+    }
+
+    private void updateTooltip(final boolean enabled) {
         // compose tooltip with current var names (if available)
-        StringBuffer tooltip = new StringBuffer("Flow variable: ");
+        final StringBuilder tooltip = new StringBuilder("Flow variable: ");
         if (enabled) {
-            tooltip.append("replacing with '" + m_model.getInputVariableName()
-                    + "'");
+            tooltip.append("replacing with '").append(m_model.getInputVariableName()).append("'");
         } else {
             tooltip.append("<no variable replacement>");
         }
         tooltip.append(", ");
         if (m_model.getOutputVariableName() != null) {
-            tooltip.append("export as '"
-                    + m_model.getOutputVariableName() + "'");
+            tooltip.append("export as '").append(m_model.getOutputVariableName()).append("'");
         } else {
             tooltip.append("<no export as variable>");
         }
