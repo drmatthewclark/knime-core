@@ -16,6 +16,7 @@
    <extension-point id="WorkflowSaveHook" name="Extensions that are run after a workflow is saved to disc" schema="schema/WorkflowSaveHook.exsd"/>
    <extension-point id="FileSystemBrowser" name="FileSystemBrowser" schema="schema/FileSystemBrowser.exsd"/>
    <extension-point id="DataColumnMetaDataType" name="DataColumnMetaDataType" schema="schema/DataColumnMetaDataType.exsd"/>
+   <extension-point id="FlowVariableType" name="FlowVariableType" schema="schema/FlowVariableType.exsd"/>
    <extension
          point="org.knime.core.NodeExecutionJobManagerFactory">
       <NodeExecutionJobManagerFactory
@@ -664,5 +665,44 @@
       <DataColumnMetaData
             dataColumnMetaDataExtension="org.knime.core.data.probability.nominal.NominalDistributionValueMetaDataExtension">
       </DataColumnMetaData>
+   </extension>
+   <extension
+         point="org.knime.core.FlowVariableType">
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$BooleanType$BooleanTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$BooleanArrayType$BooleanArrayTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$IntType$IntTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$IntArrayType$IntArrayTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$DoubleType$DoubleTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$DoubleArrayType$DoubleArrayTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$LongType$LongTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$LongArrayType$LongArrayTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$StringType$StringTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$StringArrayType$StringArrayTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$CredentialsType$CredentialsTypeExtension">
+      </VariableType>
+      <VariableType
+            extension="org.knime.core.node.workflow.VariableType$FSConnectionType$FSConnectionTypeExtension">
+      </VariableType>
    </extension>
 </plugin>

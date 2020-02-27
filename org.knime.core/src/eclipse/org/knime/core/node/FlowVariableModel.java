@@ -76,7 +76,6 @@ public class FlowVariableModel {
     // private members
     private final NodeDialogPane m_parent;
     private final String[] m_keys;  // the hierarchy of Config Keys for this object
-//    private FlowVariable.Type m_type;   // the class of the variable
     private final VariableType<?> m_variableType;
 
     /* variable names that are to be used for the corresponding settings
@@ -100,7 +99,6 @@ public class FlowVariableModel {
             final FlowVariable.Type type) {
         m_parent = parent;
         m_keys = keys.clone();
-//        m_type = type;
         m_variableType = getVariableTypeFromType(type);
     }
 
@@ -162,8 +160,6 @@ public class FlowVariableModel {
      * @return the key of the corresponding setting object.
      */
     public String[] getKeys() {
-        // TODO should be a copy otherwise clients can manipulate the internal state of this model however calling
-        // code could be slowed down by copying
         return m_keys;
     }
 
@@ -241,18 +237,8 @@ public class FlowVariableModel {
      * @return array of variables names that match the type of this model.
      */
     FlowVariable[] getMatchingVariables() {
-//        ArrayList<FlowVariable> list = new ArrayList<>();
-//        final FlowVariable.Type type = getType();
-//        for (FlowVariable sv
-//                : getParent().getAvailableFlowVariables().values()) {
-////            if (ConfigEditTreeModel.doesTypeAccept(type, sv.getType())) {
-//            if (m_variableType.isCompatible(sv.getVariableType())) {
-//                list.add(sv);
-//            }
-//        }
-//        return list.toArray(new FlowVariable[list.size()]);
         return getParent().getAllAvailableFlowVariables().values().stream()
-            .filter(v -> m_variableType.isCompatible(v.getVariableType())).toArray(FlowVariable[]::new);
+            .filter(v -> v.getVariableType().isConvertible(m_variableType)).toArray(FlowVariable[]::new);
     }
 
     /**

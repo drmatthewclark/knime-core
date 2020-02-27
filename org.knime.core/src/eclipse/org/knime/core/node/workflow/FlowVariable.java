@@ -326,13 +326,10 @@ public final class FlowVariable extends FlowObject {
     public <T> T getValue(final VariableType<T> expectedType) {
         CheckUtils.checkArgumentNotNull(expectedType);
         final VariableType<?> actualType = m_value.getType();
-        CheckUtils.checkArgument(actualType.equals(expectedType),
-            "Flow variable does not represent value of class \"%s\" (but \"%s\")", expectedType, actualType);
-
-        // It's safe to make this unchecked cast, since we just checked that expected and actual types are identical.
-        @SuppressWarnings("unchecked")
-        VariableValue<T> result = (VariableValue<T>)m_value;
-        return result.get();
+        CheckUtils.checkArgument(actualType.getConvertibleTypes().contains(expectedType),
+            "Flow variable does not represent value of class \"%s\" (but \"%s\") and also can't be converted to it.",
+            actualType, expectedType);
+        return m_value.getAs(expectedType);
     }
 
     /**

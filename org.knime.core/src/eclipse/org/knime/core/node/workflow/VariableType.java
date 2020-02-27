@@ -49,7 +49,9 @@
 package org.knime.core.node.workflow;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.DoubleStream;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
@@ -58,14 +60,14 @@ import java.util.stream.Stream;
 import javax.swing.Icon;
 
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.concurrent.ConcurrentException;
-import org.apache.commons.lang3.concurrent.LazyInitializer;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.util.CheckUtils;
 import org.knime.core.node.util.SharedIcons;
 import org.knime.core.node.workflow.CredentialsStore.CredentialsFlowVariableValue;
+
+import com.google.common.collect.Sets;
 
 /**
  * The type of a {@link FlowVariable}, replacing {@link FlowVariable.Type}. By convention, subclasses of this type are
@@ -76,18 +78,40 @@ import org.knime.core.node.workflow.CredentialsStore.CredentialsFlowVariableValu
  *
  * @author Bernd Wiswedel, KNIME AG, Zurich, Switzerland
  * @author Marc Bux, KNIME GmbH, Berlin, Germany
+ * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  * @param <T> The simple value type that is used by clients (e.g. String, Double, Integer)
  * @since 4.1
  */
 public abstract class VariableType<T> {
 
-    abstract static class VariableValue<T> {
+    private static final String CFG_CLASS = "class";
+
+    private static final String CFG_VALUE = "value";
+
+    /**
+     * The value of a {@link FlowVariable}. Associates a simple value (e.g. String, Double, Integer) with a {@link VariableType}.
+     *
+     * @noextend This class is not intended to be subclassed by clients.
+     *
+     * @author Bernd Wiswedel, KNIME AG, Zurich, Switzerland
+     * @author Marc Bux, KNIME GmbH, Berlin, Germany
+     * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+     * @param <T> The simple value type that is usded by clients (e.g. String, Double, Integer)
+     * @since 4.2
+     */
+    protected abstract static class VariableValue<T> {
 
         private final VariableType<T> m_type;
 
         private final T m_value;
 
-        private VariableValue(final VariableType<T> type, final T value) {
+        /**
+         * Constructor.
+         *
+         * @param type of the variable
+         * @param value of the variable
+         */
+        protected VariableValue(final VariableType<T> type, final T value) {
             m_type = CheckUtils.checkArgumentNotNull(type);
             m_value = value;
         }
@@ -111,8 +135,14 @@ public abstract class VariableType<T> {
             return getType().equals(other.getType()) && Objects.equals(m_value, other.m_value);
         }
 
-        T get() {
+        public T get() {
             return m_value;
+        }
+
+        <U> U getAs(final VariableType<U> expectedType) {
+            CheckUtils.checkArgument(m_type.getConvertibleTypes().contains(expectedType),
+                "The type '%s' is incompatible with the type '%s'.", m_type, expectedType);
+            return m_type.getAs(this, expectedType);
         }
 
         VariableType<T> getType() {
@@ -151,6 +181,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link BooleanType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class BooleanTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return BooleanType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link BooleanType} type.
          */
         public static final BooleanType INSTANCE = new BooleanType();
@@ -165,18 +210,18 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<Boolean> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return new BooleanType.BooleanValue(settings.getBoolean("value"));
+        protected VariableValue<Boolean> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return new BooleanType.BooleanValue(settings.getBoolean(CFG_VALUE));
         }
 
         @Override
-        VariableValue<Boolean> newValue(final Boolean v) {
+        protected VariableValue<Boolean> newValue(final Boolean v) {
             return new BooleanType.BooleanValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Boolean> v) {
-            settings.addBoolean("value", v.get());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Boolean> v) {
+            settings.addBoolean(CFG_VALUE, v.get());
         }
     }
 
@@ -201,6 +246,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link BooleanArrayType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class BooleanArrayTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return BooleanArrayType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link BooleanArrayType} type.
          */
         public static final BooleanArrayType INSTANCE = new BooleanArrayType();
@@ -214,20 +274,20 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<Boolean[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
-            final boolean[] bools = settings.getBooleanArray("value");
+        protected VariableValue<Boolean[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+            final boolean[] bools = settings.getBooleanArray(CFG_VALUE);
             return new BooleanArrayType.BooleanArrayFlowVariableValue(
                 IntStream.range(0, bools.length).mapToObj(i -> bools[i]).toArray(Boolean[]::new));
         }
 
         @Override
-        VariableValue<Boolean[]> newValue(final Boolean[] v) {
+        protected VariableValue<Boolean[]> newValue(final Boolean[] v) {
             return new BooleanArrayType.BooleanArrayFlowVariableValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Boolean[]> v) {
-            settings.addBooleanArray("value", ArrayUtils.toPrimitive(v.get()));
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Boolean[]> v) {
+            settings.addBooleanArray(CFG_VALUE, ArrayUtils.toPrimitive(v.get()));
         }
     }
 
@@ -239,6 +299,7 @@ public abstract class VariableType<T> {
      */
     public static final class DoubleType extends VariableType<Double> {
 
+
         private static final class DoubleValue extends VariableValue<Double> {
 
             private DoubleValue(final Double d) {
@@ -247,17 +308,31 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link DoubleType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class DoubleTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return DoubleType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link DoubleType} type.
          */
         public static final DoubleType INSTANCE = new DoubleType();
 
-        private DoubleType() {
-        }
+        // The varargs are safe because the created array is neither modified nor exposed
+        @SuppressWarnings("unchecked")
+        private static final Set<VariableType<?>> CONVERTIBLE_TYPES =
+            Collections.unmodifiableSet(Sets.newHashSet(INSTANCE, StringType.INSTANCE));
 
-        @Override
-        public boolean isCompatible(final VariableType<?> type) {
-            // TODO should Boolean be considered to be numeric?
-            return super.isCompatible(type) || LongType.INSTANCE.equals(type) || IntType.INSTANCE.equals(type);
+        private DoubleType() {
         }
 
         @Override
@@ -272,18 +347,36 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<Double> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return new DoubleType.DoubleValue(settings.getDouble("value"));
+        protected VariableValue<Double> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return new DoubleType.DoubleValue(settings.getDouble(CFG_VALUE));
         }
 
         @Override
-        VariableValue<Double> newValue(final Double v) {
+        protected VariableValue<Double> newValue(final Double v) {
             return new DoubleType.DoubleValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Double> v) {
-            settings.addDouble("value", v.get());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Double> v) {
+            settings.addDouble(CFG_VALUE, v.get());
+        }
+
+        @Override
+        public Set<VariableType<?>> getConvertibleTypes() {
+            return CONVERTIBLE_TYPES;
+        }
+
+        @Override
+        protected <U> U getAs(final VariableValue<Double> value, final VariableType<U> convertibleType) {
+            if (this.equals(convertibleType)) {
+                return super.getAs(value, convertibleType);
+            } else if (StringType.INSTANCE.equals(convertibleType)) {
+                @SuppressWarnings("unchecked")
+                final U result = (U)value.asString();
+                return result;
+            } else {
+                throw createNotConvertibleException(this, convertibleType);
+            }
         }
     }
 
@@ -308,6 +401,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link DoubleArrayType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class DoubleArrayTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return DoubleArrayType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link DoubleArrayType} type.
          */
         public static final DoubleArrayType INSTANCE = new DoubleArrayType();
@@ -321,19 +429,19 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<Double[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+        protected VariableValue<Double[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
             return new DoubleArrayType.DoubleArrayValue(
-                DoubleStream.of(settings.getDoubleArray("value")).boxed().toArray(Double[]::new));
+                DoubleStream.of(settings.getDoubleArray(CFG_VALUE)).boxed().toArray(Double[]::new));
         }
 
         @Override
-        VariableValue<Double[]> newValue(final Double[] v) {
+        protected VariableValue<Double[]> newValue(final Double[] v) {
             return new DoubleArrayType.DoubleArrayValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Double[]> v) {
-            settings.addDoubleArray("value", Stream.of(v.get()).mapToDouble(Double::doubleValue).toArray());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Double[]> v) {
+            settings.addDoubleArray(CFG_VALUE, Stream.of(v.get()).mapToDouble(Double::doubleValue).toArray());
         }
     }
 
@@ -353,9 +461,29 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link IntType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class IntTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return IntType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link IntType} type.
          */
         public static final IntType INSTANCE = new IntType();
+
+        // Safe because the array is neither modified nor exposed
+        @SuppressWarnings("unchecked")
+        private static final Set<VariableType<?>> CONVERTIBLE_TYPES =
+            Collections.unmodifiableSet(Sets.newHashSet(INSTANCE, DoubleType.INSTANCE, StringType.INSTANCE));
 
         @Override
         public Icon getIcon() {
@@ -369,18 +497,40 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<Integer> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return new IntType.IntValue(settings.getInt("value"));
+        protected VariableValue<Integer> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return new IntType.IntValue(settings.getInt(CFG_VALUE));
         }
 
         @Override
-        VariableValue<Integer> newValue(final Integer v) {
+        protected VariableValue<Integer> newValue(final Integer v) {
             return new IntType.IntValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Integer> v) {
-            settings.addInt("value", v.get());
+        public Set<VariableType<?>> getConvertibleTypes() {
+            return CONVERTIBLE_TYPES;
+        }
+
+        @Override
+        protected <U> U getAs(final VariableValue<Integer> value, final VariableType<U> conversionTarget) {
+            if (this.equals(conversionTarget)) {
+                return super.getAs(value, conversionTarget);
+            } else if (DoubleType.INSTANCE.equals(conversionTarget)) {
+                // Safe because U is Double in case of DoubleType
+                @SuppressWarnings("unchecked")
+                U result = (U)Double.valueOf(value.get().doubleValue());
+                return result;
+            } else if (StringType.INSTANCE.equals(conversionTarget)) {
+                // TODO implement string support
+                return null;
+            } else {
+                throw createNotConvertibleException(this, conversionTarget);
+            }
+        }
+
+        @Override
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Integer> v) {
+            settings.addInt(CFG_VALUE, v.get());
         }
     }
 
@@ -405,6 +555,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link IntArrayType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class IntArrayTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return IntArrayType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link IntArrayType} type.
          */
         public static final IntArrayType INSTANCE = new IntArrayType();
@@ -418,19 +583,19 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<Integer[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+        protected VariableValue<Integer[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
             return new IntArrayType.IntArrayValue(
-                IntStream.of(settings.getIntArray("value")).boxed().toArray(Integer[]::new));
+                IntStream.of(settings.getIntArray(CFG_VALUE)).boxed().toArray(Integer[]::new));
         }
 
         @Override
-        VariableValue<Integer[]> newValue(final Integer[] v) {
+        protected VariableValue<Integer[]> newValue(final Integer[] v) {
             return new IntArrayType.IntArrayValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Integer[]> v) {
-            settings.addIntArray("value", Stream.of(v.get()).mapToInt(Integer::intValue).toArray());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Integer[]> v) {
+            settings.addIntArray(CFG_VALUE, Stream.of(v.get()).mapToInt(Integer::intValue).toArray());
         }
     }
 
@@ -450,6 +615,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link LongType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class LongTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return LongType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link LongType} type.
          */
         public static final LongType INSTANCE = new LongType();
@@ -459,28 +639,23 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        public boolean isCompatible(final VariableType<?> type) {
-            return this.equals(type) || IntType.INSTANCE.equals(type);
-        }
-
-        @Override
         public Icon getIcon() {
             return SharedIcons.FLOWVAR_LONG.get();
         }
 
         @Override
-        VariableValue<Long> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return new LongType.LongValue(settings.getLong("value"));
+        protected VariableValue<Long> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return new LongType.LongValue(settings.getLong(CFG_VALUE));
         }
 
         @Override
-        VariableValue<Long> newValue(final Long v) {
+        protected VariableValue<Long> newValue(final Long v) {
             return new LongType.LongValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Long> v) {
-            settings.addLong("value", v.get());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Long> v) {
+            settings.addLong(CFG_VALUE, v.get());
         }
     }
 
@@ -505,6 +680,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link LongArrayType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class LongArrayTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return LongArrayType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link LongArrayType} type.
          */
         public static final LongArrayType INSTANCE = new LongArrayType();
@@ -518,19 +708,19 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<Long[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+        protected VariableValue<Long[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
             return new LongArrayType.LongArrayValue(
-                LongStream.of(settings.getLongArray("value")).boxed().toArray(Long[]::new));
+                LongStream.of(settings.getLongArray(CFG_VALUE)).boxed().toArray(Long[]::new));
         }
 
         @Override
-        VariableValue<Long[]> newValue(final Long[] v) {
+        protected VariableValue<Long[]> newValue(final Long[] v) {
             return new LongArrayType.LongArrayValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<Long[]> v) {
-            settings.addLongArray("value", Stream.of(v.get()).mapToLong(Long::longValue).toArray());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<Long[]> v) {
+            settings.addLongArray(CFG_VALUE, Stream.of(v.get()).mapToLong(Long::longValue).toArray());
         }
     }
 
@@ -555,22 +745,26 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link StringType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class StringTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return StringType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link StringType} type.
          */
         public static final StringType INSTANCE = new StringType();
 
         private StringType() {
-        }
-
-        @Override
-        public boolean isCompatible(final VariableType<?> type) {
-            // TODO discuss if strings should be compatible to all types.
-            // That would require some changes in other places, too.
-            return super.isCompatible(type) //
-                    || BooleanType.INSTANCE.isCompatible(type) //
-                    || IntType.INSTANCE.isCompatible(type) //
-                    || DoubleType.INSTANCE.isCompatible(type) //
-                    || LongType.INSTANCE.isCompatible(type);
         }
 
         @Override
@@ -585,18 +779,18 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<String> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return new StringType.StringValue(settings.getString("value"));
+        protected VariableValue<String> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return new StringType.StringValue(settings.getString(CFG_VALUE));
         }
 
         @Override
-        VariableValue<String> newValue(final String v) {
+        protected VariableValue<String> newValue(final String v) {
             return new StringType.StringValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<String> v) {
-            settings.addString("value", v.get());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<String> v) {
+            settings.addString(CFG_VALUE, v.get());
         }
     }
 
@@ -621,6 +815,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link StringArrayType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class StringArrayTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return StringArrayType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link StringArrayType} type.
          */
         public static final StringArrayType INSTANCE = new StringArrayType();
@@ -634,18 +843,18 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<String[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
-            return new StringArrayType.StringArrayValue(settings.getStringArray("value"));
+        protected VariableValue<String[]> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException {
+            return new StringArrayType.StringArrayValue(settings.getStringArray(CFG_VALUE));
         }
 
         @Override
-        VariableValue<String[]> newValue(final String[] v) {
+        protected VariableValue<String[]> newValue(final String[] v) {
             return new StringArrayType.StringArrayValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<String[]> v) {
-            settings.addStringArray("value", v.get());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<String[]> v) {
+            settings.addStringArray(CFG_VALUE, v.get());
         }
     }
 
@@ -670,6 +879,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link CredentialsType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class CredentialsTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return CredentialsType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link CredentialsType} type.
          */
         public static final CredentialsType INSTANCE = new CredentialsType();
@@ -685,20 +909,20 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<CredentialsFlowVariableValue> loadValue(final NodeSettingsRO settings)
+        protected VariableValue<CredentialsFlowVariableValue> loadValue(final NodeSettingsRO settings)
             throws InvalidSettingsException {
             return new CredentialsType.CredentialsValue(
-                CredentialsFlowVariableValue.load(settings.getNodeSettings("value")));
+                CredentialsFlowVariableValue.load(settings.getNodeSettings(CFG_VALUE)));
         }
 
         @Override
-        VariableValue<CredentialsFlowVariableValue> newValue(final CredentialsFlowVariableValue v) {
+        protected VariableValue<CredentialsFlowVariableValue> newValue(final CredentialsFlowVariableValue v) {
             return new CredentialsType.CredentialsValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<CredentialsFlowVariableValue> v) {
-            v.get().save(settings.addNodeSettings("value"));
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<CredentialsFlowVariableValue> v) {
+            v.get().save(settings.addNodeSettings(CFG_VALUE));
         }
     }
 
@@ -723,6 +947,21 @@ public abstract class VariableType<T> {
         }
 
         /**
+         * Used to register {@link FSConnectionType} at the FlowVariableType extension point.
+         *
+         * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
+         * @since 4.2
+         */
+        public static final class FSConnectionTypeExtension implements VariableTypeExtension {
+
+            @Override
+            public VariableType<?> getVariableType() {
+                return BooleanType.INSTANCE;
+            }
+
+        }
+
+        /**
          * The singleton instance of the {@link FSConnectionType} type.
          */
         public static final FSConnectionType INSTANCE = new FSConnectionType();
@@ -732,64 +971,39 @@ public abstract class VariableType<T> {
         }
 
         @Override
-        VariableValue<FSConnectionFlowVariableValue> loadValue(final NodeSettingsRO settings)
+        protected VariableValue<FSConnectionFlowVariableValue> loadValue(final NodeSettingsRO settings)
             throws InvalidSettingsException {
             return new FSConnectionType.FSConnectionValue(
-                new FSConnectionFlowVariableValue(settings.getString("value")));
+                new FSConnectionFlowVariableValue(settings.getString(CFG_VALUE)));
         }
 
         @Override
-        VariableValue<FSConnectionFlowVariableValue> newValue(final FSConnectionFlowVariableValue v) {
+        protected VariableValue<FSConnectionFlowVariableValue> newValue(final FSConnectionFlowVariableValue v) {
             return new FSConnectionType.FSConnectionValue(v);
         }
 
         @Override
-        void saveValue(final NodeSettingsWO settings, final VariableValue<FSConnectionFlowVariableValue> v) {
-            settings.addString("value", v.get().connectionKey());
+        protected void saveValue(final NodeSettingsWO settings, final VariableValue<FSConnectionFlowVariableValue> v) {
+            settings.addString(CFG_VALUE, v.get().connectionKey());
         }
     }
-
-    private static final LazyInitializer<VariableType<?>[]> ALL_TYPES_INITER =
-        new LazyInitializer<VariableType<?>[]>() {
-
-            @Override
-            protected VariableType<?>[] initialize() throws ConcurrentException {
-                return new VariableType[]{ //
-                    StringType.INSTANCE, //
-                    StringArrayType.INSTANCE, //
-                    DoubleType.INSTANCE, //
-                    DoubleArrayType.INSTANCE, //
-                    IntType.INSTANCE, //
-                    IntArrayType.INSTANCE, //
-                    LongType.INSTANCE, //
-                    LongArrayType.INSTANCE, //
-                    BooleanType.INSTANCE, //
-                    BooleanArrayType.INSTANCE, //
-                    CredentialsType.INSTANCE, //
-                    FSConnectionType.INSTANCE, //
-                };
-            }
-        };
 
     /**
      * Lazy-initialized array of all supported types (lazy as otherwise it causes class loading race conditions). In the
      * future this list may or may not be filled by means of an extension point.
      */
     static VariableType<?>[] getAllTypes() {
-        try {
-            return ALL_TYPES_INITER.get();
-        } catch (ConcurrentException ex) {
-            throw new InternalError(ex);
-        }
+        return VariableTypeRegistry.getInstance().getAllTypes();
     }
 
     static VariableValue<?> load(final NodeSettingsRO sub) throws InvalidSettingsException {
-        final String identifier = CheckUtils.checkSettingNotNull(sub.getString("class"), "'class' must not be null");
+        final String identifier = CheckUtils.checkSettingNotNull(sub.getString(CFG_CLASS), "'class' must not be null");
         final VariableType<?> type = Arrays.stream(getAllTypes())//
             .filter(t -> identifier.equals(t.getIdentifier()))//
             .findFirst()//
             .orElseThrow(
-                () -> new InvalidSettingsException("No flow variable type for identifier/class '" + identifier + "'"));
+                () -> new InvalidSettingsException(
+                    String.format("No flow variable type for identifier/class '%s'", identifier)));
         return type.loadValue(sub);
     }
 
@@ -809,36 +1023,97 @@ public abstract class VariableType<T> {
      */
     public String getIdentifier() {
         @SuppressWarnings("deprecation")
-        final boolean isOtherType = getType().equals(FlowVariable.Type.OTHER);
+        final boolean isOtherType = getType() == FlowVariable.Type.OTHER;
         return isOtherType ? getClass().getSimpleName().replace("Type", "").toUpperCase() : getType().toString();
     }
 
     /**
-     * Checks if the provided <b>type</b> is compatible with this type.
+     * Checks if this type can be converted to {@link VariableType type}, i.e. if getAs(VariableValue<T>,
+     * VariableType<U>) can convert the T of VariableValue<T> to the U of VariableType<U>.
      *
-     * @param type to check for compatibility
+     * @param type to check for convertability
      * @return <code>true</code> if <b>type</b> is compatible with this type
      * @since 4.2
      */
-    public boolean isCompatible(final VariableType<?> type) {
-        return this.equals(type);
+    public final boolean isConvertible(final VariableType<?> type) {
+        return getConvertibleTypes().contains(type);
     }
+
+    /**
+     * Returns the set of {@link VariableType VariableTypes} this type can be converted to, i.e. all types for which
+     * {@link VariableType#getAs(VariableValue, VariableType)} is properly defined.
+     *
+     * @return the set of convertible {@link VariableType VariableTypes}
+     * @since 4.2
+     */
+    public Set<VariableType<?>> getConvertibleTypes() {
+        return Collections.singleton(this);
+    }
+
+    /**
+     * Converts the value stored in {@link VariableValue value} to the type of {@link VariableType compatibleType}.
+     *
+     * @param value to convert
+     * @param conversionTarget to convert <b>value</b> to
+     * @return the converted value stored in <b>value</b>
+     * @since 4.2
+     */
+    protected <U> U getAs(final VariableValue<T> value, final VariableType<U> conversionTarget) {
+        CheckUtils.checkArgumentNotNull(value);
+        CheckUtils.checkArgumentNotNull(conversionTarget);
+        CheckUtils.checkArgument(this.equals(conversionTarget), "The type '%s' is incompatible with the type '%s'.",
+            conversionTarget, this);
+        CheckUtils.checkArgument(this.equals(value.getType()), "Can't convert incompatible value '%s'.", value);
+        // the above check makes sure that U is T
+        @SuppressWarnings("unchecked")
+        final U result = (U)value.get();
+        return result;
+    }
+
+    /**
+     * Creates the exception to be thrown if a user attempts to convert one flow variable type to a type it is not
+     * convertible to.
+     *
+     * @param from the type to convert to {@link VariableType to}
+     * @param to the type to convert to
+     * @return the not convertible exception
+     * @since 4.2
+     */
+    protected static IllegalArgumentException createNotConvertibleException(final VariableType<?> from,
+        final VariableType<?> to) {
+        return new IllegalArgumentException(String.format(
+            "Flow variables of the type '%s' can't be converted to flow variables of the type '%s'.", from, to));
+    }
+
+
 
     @SuppressWarnings("deprecation")
     FlowVariable.Type getType() {
         return FlowVariable.Type.OTHER;
     }
 
-    abstract VariableValue<T> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException;
+    // TODO get class of simple type
 
-    abstract VariableValue<T> newValue(final T v);
+    /**
+     * @since 4.2
+     */
+    protected abstract VariableValue<T> loadValue(final NodeSettingsRO settings) throws InvalidSettingsException;
+
+    /**
+     * @since 4.2
+     */
+    protected abstract VariableValue<T> newValue(final T v);
+
 
     final void save(final VariableValue<T> value, final NodeSettingsWO settings) {
-        settings.addString("class", getIdentifier());
+        settings.addString(CFG_CLASS, getIdentifier());
         value.getType().saveValue(settings, value);
     }
 
-    abstract void saveValue(final NodeSettingsWO settings, final VariableValue<T> v);
+    /**
+     * @since 4.2
+     */
+    protected abstract void saveValue(final NodeSettingsWO settings, final VariableValue<T> v);
 
     @Override
     public String toString() {
