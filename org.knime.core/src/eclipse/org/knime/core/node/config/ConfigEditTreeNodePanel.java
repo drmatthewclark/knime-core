@@ -55,11 +55,11 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
 import java.awt.event.ItemEvent;
-import java.awt.event.ItemListener;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
@@ -76,6 +76,7 @@ import javax.swing.border.Border;
 import org.knime.core.data.DataValue;
 import org.knime.core.node.config.ConfigEditTreeModel.ConfigEditTreeNode;
 import org.knime.core.node.config.base.AbstractConfigEntry;
+import org.knime.core.node.config.base.ConfigEntries;
 import org.knime.core.node.util.ConvenienceMethods;
 import org.knime.core.node.workflow.FlowObjectStack;
 import org.knime.core.node.workflow.FlowVariable;
@@ -134,14 +135,10 @@ public class ConfigEditTreeNodePanel extends JPanel {
             }
         };
         m_valueField.addFocusListener(l);
-        m_valueField.addItemListener(new ItemListener() {
-            /** {@inheritDoc} */
-            @Override
-            public void itemStateChanged(final ItemEvent e) {
+        m_valueField.addItemListener(e -> {
                 if (e.getStateChange() == ItemEvent.SELECTED) {
                     onSelectedItemChange(e.getItem());
                 }
-            }
         });
         m_exposeAsVariableField = new JTextField(8);
         m_exposeAsVariableField.addFocusListener(l);
@@ -171,76 +168,15 @@ public class ConfigEditTreeNodePanel extends JPanel {
         final Collection<FlowVariable> suitableVariables = new ArrayList<>();
         if (m_treeNode != null) {
             final AbstractConfigEntry entry = treeNode.getConfigEntry();
-            switch (entry.getType()) {
-                case config:
-                    if (m_treeNode.getArraySubType().isPresent()) {
-                        switch (m_treeNode.getArraySubType().get()) {
-                            case xbyte:
-                            case xshort:
-                            case xint:
-                                selType = IntArrayType.INSTANCE;
-                                suitableVariables.addAll(getAllVariablesOfTypes(IntType.INSTANCE));
-                                break;
-                            case xlong:
-                                selType = LongArrayType.INSTANCE;
-                                suitableVariables.addAll(
-                                    getAllVariablesOfTypes(IntArrayType.INSTANCE, IntType.INSTANCE, LongType.INSTANCE));
-                                break;
-                            case xfloat:
-                            case xdouble:
-                                selType = DoubleArrayType.INSTANCE;
-                                suitableVariables.addAll(getAllVariablesOfTypes(IntArrayType.INSTANCE,
-                                    LongArrayType.INSTANCE, IntType.INSTANCE, LongType.INSTANCE, DoubleType.INSTANCE));
-                                break;
-                            case xboolean:
-                                selType = BooleanArrayType.INSTANCE;
-                                suitableVariables.addAll(getAllVariablesOfTypes(BooleanType.INSTANCE));
-                                break;
-                            case xchar:
-                            case xstring:
-                                selType = StringArrayType.INSTANCE;
-                                suitableVariables
-                                    .addAll(getAllVariablesOfTypes(BooleanArrayType.INSTANCE, IntArrayType.INSTANCE,
-                                        LongArrayType.INSTANCE, DoubleArrayType.INSTANCE, BooleanType.INSTANCE,
-                                        IntType.INSTANCE, LongType.INSTANCE, DoubleType.INSTANCE, StringType.INSTANCE));
-                                break;
-                            default:
-                        }
-                    }
-                    break;
-                case xbyte:
-                case xshort:
-                case xint:
-                    selType = IntType.INSTANCE;
-                    break;
-                case xlong:
-                    selType = LongType.INSTANCE;
-                    suitableVariables.addAll(getAllVariablesOfTypes(IntType.INSTANCE));
-                    break;
-                case xfloat:
-                case xdouble:
-                    selType = DoubleType.INSTANCE;
-                    suitableVariables.addAll(getAllVariablesOfTypes(IntType.INSTANCE, LongType.INSTANCE));
-                    break;
-                case xboolean:
-                    selType = BooleanType.INSTANCE;
-                    suitableVariables.addAll(getAllVariablesOfTypes(StringType.INSTANCE));
-                    break;
-                case xchar:
-                case xtransientstring:
-                case xpassword:
-                case xstring:
-                default:
-                    selType = StringType.INSTANCE;
-                    suitableVariables.addAll(getAllVariablesOfTypes(BooleanType.INSTANCE, IntType.INSTANCE,
-                        LongType.INSTANCE, DoubleType.INSTANCE));
-            }
+            selType = findSuitableVariables(suitableVariables, entry);
 
             if (selType == null) {
                 selType = StringType.INSTANCE;
                 m_keyIcon = ICON_UNKNOWN;
             } else {
                 m_keyIcon = selType.getIcon();
+                // TODO isn't this redundant? We already added all variables of type selType in findSuitableVariables (except in case of IntType (see the respective todo))
+                // TODO We also added all "subtypes" i.e. types that are compatible with seltype
                 suitableVariables.addAll(getAllVariablesOfTypes(selType));
             }
             m_keyLabel.setText(entry.getKey());
@@ -291,39 +227,107 @@ public class ConfigEditTreeNodePanel extends JPanel {
         if (match != null) {
             m_valueField.setSelectedItem(match);
         } else if (usedVariable != null) {
-            // show name in variable in arrows; makes also sure to
-            // not violate the namespace of the variable (could be
-            // node-local variable, which can't be created outside
-            // the workflow package)
-            String errorName = "<" + usedVariable + ">";
-            String error = "Invalid variable \"" + usedVariable + "\"";
-            final FlowVariable virtualVar;
-            if (selType.equals(DoubleArrayType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, DoubleArrayType.INSTANCE, new Double[0]);
-            } else if (selType.equals(LongArrayType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, LongArrayType.INSTANCE, new Long[0]);
-            } else if (selType.equals(IntArrayType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, IntArrayType.INSTANCE, new Integer[0]);
-            } else if (selType.equals(BooleanArrayType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, BooleanArrayType.INSTANCE, new Boolean[0]);
-            } else if (selType.equals(StringArrayType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, StringArrayType.INSTANCE, new String[0]);
-            } else if (selType.equals(DoubleType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, 0d);
-            } else if (selType.equals(LongType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, LongType.INSTANCE, 0L);
-            } else if (selType.equals(IntType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, 0);
-            } else if (selType.equals(BooleanType.INSTANCE)) {
-                virtualVar = new FlowVariable(errorName, BooleanType.INSTANCE, false);
-            } else {
-                virtualVar = new FlowVariable(errorName, "");
-            }
-            ComboBoxElement cbe = new ComboBoxElement(virtualVar, error);
+            final FlowVariable virtualVar = createVirtualVariable(usedVariable, selType);
+            final String error = "Invalid variable \"" + usedVariable + "\"";
+            final ComboBoxElement cbe = new ComboBoxElement(virtualVar, error);
             model.addElement(cbe);
             m_valueField.setSelectedItem(cbe);
         }
         m_valueField.setEnabled(model.getSize() > 1);
+    }
+
+    private static FlowVariable createVirtualVariable(final String usedVariable, final VariableType<?> selType) {
+        // show name in variable in arrows; makes also sure to
+        // not violate the namespace of the variable (could be
+        // node-local variable, which can't be created outside
+        // the workflow package)
+        String errorName = "<" + usedVariable + ">";
+        final FlowVariable virtualVar;
+        if (selType.equals(DoubleArrayType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, DoubleArrayType.INSTANCE, new Double[0]);
+        } else if (selType.equals(LongArrayType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, LongArrayType.INSTANCE, new Long[0]);
+        } else if (selType.equals(IntArrayType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, IntArrayType.INSTANCE, new Integer[0]);
+        } else if (selType.equals(BooleanArrayType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, BooleanArrayType.INSTANCE, new Boolean[0]);
+        } else if (selType.equals(StringArrayType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, StringArrayType.INSTANCE, new String[0]);
+        } else if (selType.equals(DoubleType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, 0d);
+        } else if (selType.equals(LongType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, LongType.INSTANCE, 0L);
+        } else if (selType.equals(IntType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, 0);
+        } else if (selType.equals(BooleanType.INSTANCE)) {
+            virtualVar = new FlowVariable(errorName, BooleanType.INSTANCE, false);
+        } else {
+            virtualVar = new FlowVariable(errorName, "");
+        }
+        return virtualVar;
+    }
+
+    private VariableType<?> findSuitableVariables(final Collection<FlowVariable> suitableVariables,
+        final AbstractConfigEntry entry) {
+        switch (entry.getType()) {
+            case config:
+                final Optional<ConfigEntries> optionalArraySubType = m_treeNode.getArraySubType();
+                if (optionalArraySubType.isPresent()) {
+                    switch (optionalArraySubType.get()) {
+                        case xbyte:
+                        case xshort:
+                        case xint:
+                            suitableVariables.addAll(getAllVariablesOfTypes(IntType.INSTANCE));
+                            return IntArrayType.INSTANCE;
+                        case xlong:
+                            suitableVariables.addAll(
+                                getAllVariablesOfTypes(IntArrayType.INSTANCE, IntType.INSTANCE, LongType.INSTANCE));
+                            return LongArrayType.INSTANCE;
+                        case xfloat:
+                        case xdouble:
+                            suitableVariables.addAll(getAllVariablesOfTypes(IntArrayType.INSTANCE,
+                                LongArrayType.INSTANCE, IntType.INSTANCE, LongType.INSTANCE, DoubleType.INSTANCE));
+                            return DoubleArrayType.INSTANCE;
+                        case xboolean:
+                            suitableVariables.addAll(getAllVariablesOfTypes(BooleanType.INSTANCE));
+                            return BooleanArrayType.INSTANCE;
+                        case xchar:
+                        case xstring:
+                            suitableVariables
+                                .addAll(getAllVariablesOfTypes(BooleanArrayType.INSTANCE, IntArrayType.INSTANCE,
+                                    LongArrayType.INSTANCE, DoubleArrayType.INSTANCE, BooleanType.INSTANCE,
+                                    IntType.INSTANCE, LongType.INSTANCE, DoubleType.INSTANCE, StringType.INSTANCE));
+                            return StringArrayType.INSTANCE;
+                        default:
+                            // TODO is it intentional that selType is left null and no suitableVariables are added if the entry type is config but the configtree has no array subtype?
+                    }
+                }
+                return null;
+            case xbyte:
+            case xshort:
+            case xint:
+                // TODO shouldn't we add all IntType variables here?
+                // TODO this omission is fixed in the calling method because it calls suitableVariables.addAll(getAllVariablesOfTypes(selType))
+                return IntType.INSTANCE;
+            case xlong:
+                suitableVariables.addAll(getAllVariablesOfTypes(IntType.INSTANCE));
+                return LongType.INSTANCE;
+            case xfloat:
+            case xdouble:
+                suitableVariables.addAll(getAllVariablesOfTypes(IntType.INSTANCE, LongType.INSTANCE));
+                return DoubleType.INSTANCE;
+            case xboolean:
+                suitableVariables.addAll(getAllVariablesOfTypes(StringType.INSTANCE));
+                return BooleanType.INSTANCE;
+            case xchar:
+            case xtransientstring:
+            case xpassword:
+            case xstring:
+            default:
+                suitableVariables.addAll(getAllVariablesOfTypes(BooleanType.INSTANCE, IntType.INSTANCE,
+                    LongType.INSTANCE, DoubleType.INSTANCE));
+                return StringType.INSTANCE;
+        }
     }
 
     private void onSelectedItemChange(final Object newItem) {
